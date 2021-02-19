@@ -1,0 +1,65 @@
+{
+   "all": {
+      "effective_sample_size": 151.831,
+      "input_params": {
+         "age": "all",
+         "country": "US",
+         "education": "all",
+         "gender": "all"
+      },
+      "results_count": 296,
+      "vaccine_accept": {
+         "weighted": {
+            "Don't know": 0.23798890886086305,
+            "I have already been vaccinated": 0.0018728689604844567,
+            "No": 0.28459033584799703,
+            "Yes": 0.47554788633065564
+         }
+      }
+   },
+   "wave1": {
+      "error": "There are too few responses for your selection. Please broaden your search parameters."
+   },
+   "wave10": {
+      "error": "There are too few responses for your selection. Please broaden your search parameters."
+   },
+   "wave11": {
+      "error": "There are too few responses for your selection. Please broaden your search parameters."
+   },
+   "wave12": {
+      "error": "There are too few responses for your selection. Please broaden your search parameters."
+   },
+   "wave13": {
+      "error": "There are too few responses for your selection. Please broaden your search parameters."
+   },
+   "wave14": {
+      "error": "There are too few responses for your selection. Please broaden your search parameters."
+   },
+   "wave15": {
+      "error": "There are too few responses for your selection. Please broaden your search parameters."
+   },
+   "wave2": {
+      "error": "There are too few responses for your selection. Please broaden your search parameters."
+   },
+   "wave3": {
+      "error": "There are too few responses for your selection. Please broaden your search parameters."
+   },
+   "wave4": {
+      "error": "There are too few responses for your selection. Please broaden your search parameters."
+   },
+   "wave5": {
+      "error": "There are too few responses for your selection. Please broaden your search parameters."
+   },
+   "wave6": {
+      "error": "There are too few responses for your selection. Please broaden your search parameters."
+   },
+   "wave7": {
+      "error": "There are too few responses for your selection. Please broaden your search parameters."
+   },
+   "wave8": {
+      "error": "There are too few responses for your selection. Please broaden your search parameters."
+   },
+   "wave9": {
+      "error": "There are too few responses for your selection. Please broaden your search parameters."
+   }
+}
