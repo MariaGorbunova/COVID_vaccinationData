@@ -1,6 +1,7 @@
 # Maria Gorbunova
 # LAB 4
 # Data used: Global survey on coronavirus beliefs, behaviors, and norms: Technical Report
+import os
 import re
 import time
 import json
@@ -9,6 +10,7 @@ import threading
 import matplotlib
 import numpy as np
 import tkinter as tk
+import tkinter.filedialog
 
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg  # Canvas widget
 import matplotlib.pyplot as plt  # normal import of pyplot to plot
@@ -17,8 +19,6 @@ import tkinter.messagebox as tkmb
 matplotlib.use('TkAgg')  # tell matplotlib to work with Tkinter
 
 NUM_WAVES = 15
-
-DEBUG = False
 
 statesDict = {
     'Alabama': 'AL',
@@ -75,12 +75,14 @@ statesDict = {
 
 
 def set_timer(fct):
+    """decorator for response request to print the time """
+
     def print_stats(*args, **kwargs):
         start = time.time()
         print("Setting the timer on...")
         result = fct(*args, **kwargs)
-        print("Requesting response elapsed time: {:.2f}s".format(time.time()-start))
-        return result  # returns NoneType if theres no return sttmnt
+        print("Requesting response elapsed time: {:.2f}s".format(time.time() - start))
+        return result  # returns NoneType if there's no return statement
 
     return print_stats
 
@@ -89,7 +91,6 @@ class MainWin(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("Vaccine Survey")
-        self.picked_states = []
         self.label = tk.Label(self, text="Click on state names to choose states").grid()
         self.content_frame = tk.Frame(self)
         self.scrollbar = tk.Scrollbar(self.content_frame)
@@ -100,117 +101,104 @@ class MainWin(tk.Tk):
         self.scrollbar.config(command=self.listbox.yview)
         self.listbox.pack()
         self.content_frame.grid()
-        self.listbox.bind('<ButtonRelease-1>', self.on_click_listbox)
-        self.tk.Button(self, text="OK", command=lambda: self.do_work()).grid()
-
-    def on_click_listbox(self, event):
-        """ assigns ids for states clicked by user to picked_states """
-        self.picked_states = [self.listbox.get(idx) for idx in self.listbox.curselection()]
+        tk.Button(self, text="OK", command=lambda: self.do_work()).grid()
 
     def do_work(self):
-        """ in case user picked some states from the list
-         this method will request data from the covidsurvey.mit in json format
-         then will populate the data needed for plotting
-         and will create instances of the PlotWin class """
-        if len(self.picked_states) != 0:
+        """ in case user picked some states from the list then will call other
+        methods to do the work using threads and will create 2 instances of the PlotWin class """
+        picked_states = [self.listbox.get(idx) for idx in self.listbox.curselection()]
+        if picked_states:
             error_states = []  # for printing it in the error window
             dict_vaccinated = {}  # amount of vaccinated people by state
             dict_waves = {}  # list of acceptance rate through waves for every state
-
             start = time.time()
-
             """for state in self.picked_states:
                 self.fetch_statedata(state, error_states, dict_vaccinated, dict_waves)
-            # 1.94s for the simple loop
-            print("~*~*~*~*~*~*~*~ Total elapsed time: {:.2f}s ~*~*~*~*~*~*~*~".format(time.time() - start))"""
+            # 1.94s for the simple loop"""
 
             threads = []  # create a list of threads, each thread will run function fetch_statedata
-            for state in self.picked_states:
+            for state in picked_states:
                 t = threading.Thread(target=self.fetch_statedata,
                                      args=(state, error_states, dict_vaccinated, dict_waves))
                 threads.append(t)
                 t.start()
-
-            for t in threads:
+            for t in threads:  # does it stop the loop to wait for a slow thread to join?
                 t.join()
             print("~*~*~*~*~*~*~*~ Total elapsed time: {:.2f}s ~*~*~*~*~*~*~*~".format(time.time() - start))
-
-            if len(error_states) != 0:
+            if error_states:
                 mystr = "No data for " + ', '.join(error_states)
                 tkmb.showerror("Error", mystr, parent=self)
 
             PlotWin(self, dict_waves, 'trend')
-            PlotWin(self, dict_vaccinated, 'vaccinated')
+            self.wait_window(PlotWin(self, dict_vaccinated, 'vaccinated'))
+            self.save_file(dict_waves, dict_vaccinated)
+
+    def save_file(self, dict_waves, dict_vaccinated):
+        if tkmb.askokcancel("Save", "Save result to file?", parent=self):
+            directory = tk.filedialog.askdirectory(initialdir=os.getcwd())
+            path = os.path.join(directory, "lab4dir")
+            if "lab4dir" not in os.listdir():
+                os.mkdir(path)
+            # os.chdir(path)  # either change dir, or append the path to the filename
+            filename_adress = os.path.join(path, "lab4out.txt")
+            with open(filename_adress, "w") as file:
+                for state in dict_waves:
+                    file.write(state + '\n')
+                    liststr = ', '.join(map(str, dict_waves[state]))
+                    file.write("approve: " + liststr + '\n')
+                    file.write("vaccinated: " + str(dict_vaccinated[state]) + '\n')
 
     def fetch_statedata(self, state, error_states, dict_vaccinated, dict_waves):
         response = self.get_response(statesDict[state])
-
         jsonData = json.loads(response)
-        if DEBUG:
-            print(jsonData)
-
-        # this data is for plotting the vaccinated for states
-        # Comment: could move it to the else so it is populated only by not faulty states.
-        dict_vaccinated[state] = float(
-            jsonData['all']['vaccine_accept']['weighted']["I have already been vaccinated"])
-
-        # getting the list of waves and the list for sorting in the next step
-        # Comment: I could either sort it in for_waves or do it like i did here
-        # I did it this way because I don't want to sort waves that have a lot of error values
-        waves_list, waves_sort = self.for_waves(jsonData)
-
-        if waves_list.count(-0.1) > 2:
-            # getting the list of states with no/little data to print error message
-            error_states.append(state)
+        waves_list, vaccinated = self.for_waves(jsonData)  # getting the list of waves and num of vaccinated ppl
+        if waves_list.count(0.0) == NUM_WAVES:
+            error_states.append(state)  # getting the list of states with no data to print error message
         else:
-            # TODO: clean up data (add average value)
-            # assigning sorted waves to states in dictionary
-            dict_waves[state] = self.sorted_waves(waves_list, waves_sort)
+            self.cleanup_data(waves_list)  # find average of the neighbors
+            dict_waves[state] = waves_list
+            dict_vaccinated[state] = vaccinated  # for plotting the vaccinated for states
 
     @set_timer
     def get_response(self, val):
-        """calling the api and getting the responce"""
+        """calling the api and getting the response"""
         return requests.get(
             f"http://covidsurvey.mit.edu:5000/query?&country=US&us_state={val}&timeseries=true"
             f"&signal=vaccine_accept").text
 
     def for_waves(self, jsonData):
-        """Accepts jsonData - a dictionary of data for state,
-        collects the data for each wave for a certain state
-        returns sorted list of waves
-        * we will need to sort the order of waves later
-        """
+        """Accepts jsonData - a dictionary of data for state, collects the data
+        for each wave for a certain state and returns sorted list of waves """
         waves_list, waves_sort = [], []
+        vaccinated = None
         # result of this for loop is unsorted waves_list for one state
         for wave in jsonData:
             if 'all' not in wave:  # collect data through all waves
-                waves_sort.append(int(re.findall(r'\d+', wave)[0]))  # need to figure out the order of waves
+                waves_sort.append(int(re.findall(r'\d+', wave)[0]))
                 try:
-                    if DEBUG:
-                        print('jsonData[wave]', jsonData[wave])
-                        print("jsonData[wave]['vaccine_accept']", jsonData[wave]['vaccine_accept'])
                     yes = float(jsonData[wave]['vaccine_accept']['weighted']['Yes'])
                     if 'I have already been vaccinated' in jsonData[wave]['vaccine_accept']['weighted']:
-                        yes += float(
+                        vaccinated = float(
                             jsonData[wave]['vaccine_accept']['weighted']['I have already been vaccinated'])
-                    waves_list.append(yes)
+                        yes += vaccinated
                 except KeyError:
-                    if DEBUG:
-                        print("Error! Replacing values to (-0.1) for : ", jsonData[wave])
-                    waves_list.append(-0.1)
-        return waves_list, waves_sort
+                    yes = 0.0
+                waves_list.append(yes)
+                permutation = np.argsort(waves_sort)  # sort the waves (not in order:  1 10 11 12... 2 3 4 ...)
+        return [waves_list[i] for i in permutation], vaccinated
 
-    def sorted_waves(self, unsorted_waves, idx_sortby):
-        # a = np.array(idx_sortby) # Question: can argsort python list? - seems to work
-        permutation = np.argsort(idx_sortby)
-        if DEBUG:
-            print('*' * 20, 'SORTING WAVES', '*' * 20)
-            print("Index to sort by: ", idx_sortby)
-            print("Permutation: ", permutation)
-            print("Unsorted waves: ", unsorted_waves)
-            print("Sorted waves:   ", [unsorted_waves[i] for i in permutation])
-            print('*' * 55)
-        return [unsorted_waves[i] for i in permutation]
+    def cleanup_data(self, waves_list):
+        """check the neighbors and find avg"""
+        # TODO: not happy with this
+        for i, item in enumerate(waves_list):
+            if item == 0.0:
+                if i == 0 or waves_list[i - 1] == 0.0:
+                    item = waves_list[i + 1]
+                elif i == len(waves_list) - 1 or waves_list[i + 1] == 0.0:
+                    item = waves_list[i - 1]
+                else:
+                    item = (waves_list[i - 1] + waves_list[i + 1]) / 2
+                waves_list[i] = item
 
 
 class PlotWin(tk.Toplevel):
@@ -218,24 +206,22 @@ class PlotWin(tk.Toplevel):
         super().__init__(master)
         fig = plt.figure(figsize=(5, 5))
         fig.add_subplot(111)
-
         if option == 'trend':
-            self.title("Plot vaccine positive trends for states")
+            self.title("Vaccine positive trends for states")
             plt.ylabel("acceptance rate")
-            plt.xticks(range(NUM_WAVES), rotation=45)
-            # TODO: print waves pretty
+            plt.xlabel("waves")
+            plt.xticks(range(1, NUM_WAVES + 1), rotation=45)
             for state in data:
-                plt.plot(range(NUM_WAVES), data[state], label=state)
+                plt.plot(range(1, NUM_WAVES + 1), data[state], label=state)
                 plt.legend(loc="best")
-
         elif option == 'vaccinated':
-            self.title("Plot the rate of vaccinated people")
+            self.title("Rate of vaccinated people")
             vaccinated = [x for x in data.values()]
             plt.bar(data.keys(), vaccinated, edgecolor='black')
             plt.ylabel("rate of vaccinated people")
             plt.xlabel("states")
             plt.xticks(rotation=45)
-
+        plt.tight_layout()
         canvas = FigureCanvasTkAgg(fig, master=self)
         canvas.get_tk_widget().grid()
         canvas.draw()
