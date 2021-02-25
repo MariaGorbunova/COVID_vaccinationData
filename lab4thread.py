@@ -115,9 +115,11 @@ class MainWin(tk.Tk):
             dict_vaccinated = {}  # amount of vaccinated people by state
             dict_waves = {}  # list of acceptance rate through waves for every state
             start = time.time()
-            """for state in self.picked_states:
+            """for state in picked_states:
                 self.fetch_statedata(state, error_states, dict_vaccinated, dict_waves)
-            # 1.94s for the simple loop"""
+            print("~*~*~*~*~*~*~*~ Total elapsed time: {:.2f}s ~*~*~*~*~*~*~*~".format(time.time() - start))
+            #~*~*~*~*~*~*~*~ Total elapsed time: 6.50s ~*~*~*~*~*~*~*~"""
+
 
             threads = []  # create a list of threads, each thread will run function fetch_statedata
             for state in picked_states:

@@ -264,4 +264,32 @@ if __name__ == '__main__':
     MainWin().mainloop()
 
 
+'''
+ANALYSIS
+For the experience I picked first 10 states for all of the tests.
+
+This is the time results that ive got:
+
+for loop
+~*~*~*~*~*~*~*~ Total elapsed time: 6.50s ~*~*~*~*~*~*~*~
+Explanation: 
+this way is the sowest because it calls the api one time at a time,
+so it is a sum of time of every request.
+
+threads:
+~*~*~*~*~*~*~*~ Total elapsed time: 0.67s ~*~*~*~*~*~*~*~
+Explanation: 
+this way is the fastest because it starts threads and they all request for info.
+The memory is shared and they populate what i need 'simultaneously'
+
+processes:
+~*~*~*~*~*~*~*~ Total elapsed time: 2.21s ~*~*~*~*~*~*~*~
+Explanation: 
+this way is slightly slower than the threads and fatser than loop.
+each process requests the data from the api,the memory is not shared for them.
+In order to keep all retireved data for each state I had to use queue.
+The need to exchange data through different processes slows down the elapsed time 
+
+'''
+
 
