@@ -77,7 +77,7 @@ STATESDICT = {
 
 
 def set_timer(fct):
-    """decorator for response request to print the time """
+    """decorator for API response request to print the time """
 
     def print_stats(*args, **kwargs):
         start = time.time()
@@ -89,44 +89,11 @@ def set_timer(fct):
     return print_stats
 
 
-''' #for Queue way
-    def fetch_statedata(state, Q):
+def fetch_statedata(state):  # (state, Q):
     """ gets the response from api, calls other methods to populate dictionaries with prepared data"""
     response = get_response(STATESDICT[state])
     jsonData = json.loads(response)
     error_state = False
-    waves_list, vaccinated = for_waves(jsonData)  # getting the list of waves and num of vaccinated ppl
-    if waves_list.count(0.0) >= NUM_WAVES // 2:
-        error_state = True  # getting the list of states with no data to print error message
-    else:
-        cleanup_data(waves_list)  # find average of the neighbors
-    Q.put((state, error_state, vaccinated, waves_list))'''
-
-
-def fetch_statedata(state):
-    """ gets the response from api, calls other methods to populate dictionaries with prepared data"""
-    response = get_response(STATESDICT[state])
-    jsonData = json.loads(response)
-    error_state = False
-    waves_list, vaccinated = for_waves(jsonData)  # getting the list of waves and num of vaccinated ppl
-    if waves_list.count(0.0) >= NUM_WAVES // 2:  # if more than a half data missing there's no point printing that data
-        error_state = True  # setting the state with no data to print error message
-    else:
-        cleanup_data(waves_list)  # find average of the neighbors
-    return state, error_state, vaccinated, waves_list
-
-
-@set_timer
-def get_response(val):
-    """calling the api and getting the response"""
-    return requests.get(
-        f"http://covidsurvey.mit.edu:5000/query?&country=US&us_state={val}&timeseries=true"
-        f"&signal=vaccine_accept").text
-
-
-def for_waves(jsonData):
-    """Accepts jsonData - a dictionary of data for state, collects the data
-    for each wave for a certain state and returns sorted list of waves """
     waves_list, waves_sort = [], []
     vaccinated = 0
     # result of this for loop is unsorted waves_list for one state
@@ -143,21 +110,36 @@ def for_waves(jsonData):
                 yes = 0.0
             waves_list.append(yes)
     permutation = np.argsort(waves_sort)  # sort the waves (not in order:  1 10 11 12... 2 3 4 ...)
-    return [waves_list[i] for i in permutation], vaccinated
+    waves_list = [waves_list[i] for i in permutation]
+
+    if waves_list.count(0.0) >= NUM_WAVES // 2:  # if more than a half data missing there's no point printing that data
+        error_state = True  # setting the state with no data to print error message
+    else:
+        cleanup_data(waves_list)  # find average of the neighbors
+    # Q.put((state, error_state, vaccinated, waves_list)) # instead of return do Q.put
+    return state, error_state, vaccinated, waves_list
+
+
+@set_timer
+def get_response(val):
+    """calling the api and getting the response"""
+    return requests.get(
+        f"http://covidsurvey.mit.edu:5000/query?&country=US&us_state={val}&timeseries=true"
+        f"&signal=vaccine_accept").text
 
 
 def cleanup_data(waves_list):
     """check the neighbors and find avg"""
     for i, item in enumerate(waves_list):
         if item == 0.0:
-            if i == 0 and waves_list[i + 1] != 0.0:  # or waves_list[i - 1] == 0.0:
+            if i == 0 and waves_list[i + 1] != 0.0:  # if first and no next
                 item = waves_list[i + 1]
-            elif i == len(waves_list) - 1 or waves_list[i + 1] == 0.0:
+            elif i == len(waves_list) - 1 or (waves_list[i + 1] == 0.0 and i != 0):  # if last or no next
                 item = waves_list[i - 1]
-            elif waves_list[i + 1] != 0.0 and waves_list[i - 1] != 0.0:
+            elif waves_list[i + 1] != 0.0 and waves_list[i - 1] != 0.0:  # if there's prev and next val
                 item = (waves_list[i - 1] + waves_list[i + 1]) / 2
-            else:
-                item = sum(waves_list) / len(waves_list)
+            else:  # find average for non zero vals
+                item = sum(waves_list) / (len(waves_list) - waves_list.count(0.0))
             waves_list[i] = item
 
 
@@ -197,7 +179,6 @@ class MainWin(tk.Tk):
                 else:
                     dict_vaccinated[state_tuple[0]] = state_tuple[2]
                     dict_waves[state_tuple[0]] = state_tuple[3]
-
             '''
             #using Queue
             Q = mp.Queue()
@@ -256,9 +237,9 @@ class PlotWin(tk.Toplevel):
             self.title("Vaccine positive trends for states")
             plt.ylabel("acceptance rate(%)")
             plt.xlabel("waves")
-            plt.xticks(range(1, NUM_WAVES + 1))
+            plt.xticks(range(1, NUM_WAVES+1 ))
             for state in data:
-                plt.plot(range(1, NUM_WAVES + 1), [x * 100 for x in data[state]], label=state)
+                plt.plot(range(1, NUM_WAVES+1 ), [x * 100 for x in data[state]], label=state)
                 plt.legend(loc='best', fontsize='small')
         elif option == 'vaccinated':
             self.title("Rate of vaccinated people")

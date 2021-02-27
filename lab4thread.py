@@ -119,8 +119,9 @@ class MainWin(tk.Tk):
                 self.fetch_statedata(state, error_states, dict_vaccinated, dict_waves)
             print("~*~*~*~*~*~*~*~ Total elapsed time: {:.2f}s ~*~*~*~*~*~*~*~".format(time.time() - start))
             #~*~*~*~*~*~*~*~ Total elapsed time: 6.50s ~*~*~*~*~*~*~*~"""
-
-            # TODO: queue?
+            # Did not use queue because there is no race condition.
+            # I use list and dictionaries, and they are thread safe containers -> I only do one time operation on them
+            # and I dont really care about the order the containers get populated
             threads = []  # create a list of threads, each thread will run function fetch_statedata
             for state in picked_states:
                 t = threading.Thread(target=self.fetch_statedata,
@@ -144,7 +145,7 @@ class MainWin(tk.Tk):
     def save_file(self, dict_waves, dict_vaccinated):
         if tkmb.askokcancel("Save", "Save result to file?", parent=self):
             directory = tk.filedialog.askdirectory(initialdir='.')
-            os.chdir(directory)  # not sure how this ^^^ works
+            os.chdir(directory)
             # path = os.path.join(directory, DIR_NAME)
             if DIR_NAME not in os.listdir():
                 os.mkdir(DIR_NAME)
@@ -163,10 +164,11 @@ class MainWin(tk.Tk):
         response = self.get_response(STATESDICT[state])
         jsonData = json.loads(response)
         waves_list, vaccinated = self.for_waves(jsonData)  # getting the list of waves and num of vaccinated ppl
-        if waves_list.count(0.0) >= NUM_WAVES // 2: # if more than a half data missing there's no point printing that data
+        if waves_list.count(0.0) >= NUM_WAVES // 2:  # if more than a half data missing there's no point printing that data
             error_states.append(state)  # getting the list of states with no data to print error message
         else:
             self.cleanup_data(waves_list)  # find average of the neighbors
+            # data are stored into or removed from the container in a single operation.
             dict_waves[state] = waves_list
             dict_vaccinated[state] = vaccinated  # for plotting the vaccinated for states
 
@@ -202,14 +204,14 @@ class MainWin(tk.Tk):
         """check the neighbors and find avg"""
         for i, item in enumerate(waves_list):
             if item == 0.0:
-                if i == 0 and waves_list[i + 1] != 0.0:  # or waves_list[i - 1] == 0.0:
+                if i == 0 and waves_list[i + 1] != 0.0:  # if first and no next
                     item = waves_list[i + 1]
-                elif i == len(waves_list) - 1 or waves_list[i + 1] == 0.0:
+                elif i == len(waves_list) - 1 or (waves_list[i + 1] == 0.0 and i != 0):  # if last or no next
                     item = waves_list[i - 1]
-                elif waves_list[i + 1] != 0.0 and waves_list[i - 1] != 0.0:
+                elif waves_list[i + 1] != 0.0 and waves_list[i - 1] != 0.0:  # if there's prev and next val
                     item = (waves_list[i - 1] + waves_list[i + 1]) / 2
-                else:
-                    item = sum(waves_list) / len(waves_list)
+                else:  # find average for non zero vals
+                    item = sum(waves_list) / (len(waves_list) - waves_list.count(0.0))
                 waves_list[i] = item
 
 
