@@ -147,7 +147,7 @@ class MainWin(tk.Tk):
             directory = tk.filedialog.askdirectory(initialdir='.')
             os.chdir(directory)
             # path = os.path.join(directory, DIR_NAME)
-            if DIR_NAME not in os.listdir():
+            if DIR_NAME not in os.listdir(directory):
                 os.mkdir(DIR_NAME)
             # os.chdir(path)  # either change dir, or append the path to the filename
             # filename_address = os.path.join(path, FILE_NAME)
@@ -164,7 +164,7 @@ class MainWin(tk.Tk):
         response = self.get_response(STATESDICT[state])
         jsonData = json.loads(response)
         waves_list, vaccinated = self.for_waves(jsonData)  # getting the list of waves and num of vaccinated ppl
-        if waves_list.count(0.0) >= NUM_WAVES // 2:  # if more than a half data missing there's no point printing that data
+        if waves_list.count(0.0) >= NUM_WAVES // 2:  # if more than a half data missing - bad data
             error_states.append(state)  # getting the list of states with no data to print error message
         else:
             self.cleanup_data(waves_list)  # find average of the neighbors

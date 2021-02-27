@@ -216,7 +216,7 @@ class MainWin(tk.Tk):
             directory = tk.filedialog.askdirectory(initialdir='.')
             os.chdir(directory)  # not sure how this ^^^ works
             # path = os.path.join(directory, DIR_NAME)
-            if DIR_NAME not in os.listdir():
+            if DIR_NAME not in os.listdir(directory):
                 os.mkdir(DIR_NAME)
             # os.chdir(path)  # either change dir, or append the path to the filename
             # filename_address = os.path.join(path, FILE_NAME)
@@ -237,9 +237,9 @@ class PlotWin(tk.Toplevel):
             self.title("Vaccine positive trends for states")
             plt.ylabel("acceptance rate(%)")
             plt.xlabel("waves")
-            plt.xticks(range(1, NUM_WAVES+1 ))
+            plt.xticks(range(1, NUM_WAVES + 1))
             for state in data:
-                plt.plot(range(1, NUM_WAVES+1 ), [x * 100 for x in data[state]], label=state)
+                plt.plot(range(1, NUM_WAVES + 1), [x * 100 for x in data[state]], label=state)
                 plt.legend(loc='best', fontsize='small')
         elif option == 'vaccinated':
             self.title("Rate of vaccinated people")
