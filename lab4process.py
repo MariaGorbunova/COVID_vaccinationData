@@ -1,6 +1,7 @@
 # Maria Gorbunova
 # LAB 4
 # Data used: Global survey on coronavirus beliefs, behaviors, and norms: Technical Report
+""" The program calls API using processes and fetches the data on COVID"""
 import os
 import re
 import time
@@ -88,7 +89,8 @@ def set_timer(fct):
     return print_stats
 
 
-def fetch_statedata(state, Q):
+''' #for Queue way
+    def fetch_statedata(state, Q):
     """ gets the response from api, calls other methods to populate dictionaries with prepared data"""
     response = get_response(STATESDICT[state])
     jsonData = json.loads(response)
@@ -98,7 +100,20 @@ def fetch_statedata(state, Q):
         error_state = True  # getting the list of states with no data to print error message
     else:
         cleanup_data(waves_list)  # find average of the neighbors
-    Q.put((state, error_state, vaccinated, waves_list))
+    Q.put((state, error_state, vaccinated, waves_list))'''
+
+
+def fetch_statedata(state):
+    """ gets the response from api, calls other methods to populate dictionaries with prepared data"""
+    response = get_response(STATESDICT[state])
+    jsonData = json.loads(response)
+    error_state = False
+    waves_list, vaccinated = for_waves(jsonData)  # getting the list of waves and num of vaccinated ppl
+    if waves_list.count(0.0) >= NUM_WAVES // 2:  # if more than a half data missing there's no point printing that data
+        error_state = True  # setting the state with no data to print error message
+    else:
+        cleanup_data(waves_list)  # find average of the neighbors
+    return state, error_state, vaccinated, waves_list
 
 
 @set_timer
@@ -133,20 +148,16 @@ def for_waves(jsonData):
 
 def cleanup_data(waves_list):
     """check the neighbors and find avg"""
-    # TODO: not happy with this
     for i, item in enumerate(waves_list):
         if item == 0.0:
-            if i == 0 or waves_list[i - 1] == 0.0:
-                try:
-                    item = waves_list[i + 1]
-                except IndexError:
-                    print(item, i, len(waves_list))
+            if i == 0 and waves_list[i + 1] != 0.0:  # or waves_list[i - 1] == 0.0:
+                item = waves_list[i + 1]
             elif i == len(waves_list) - 1 or waves_list[i + 1] == 0.0:
                 item = waves_list[i - 1]
-            # else waves_list[i + 1] == 0.0 and waves_list[i - 1] == 0.0:
-            # item = sum(waves_list) / len(waves_list)
-            else:
+            elif waves_list[i + 1] != 0.0 and waves_list[i - 1] != 0.0:
                 item = (waves_list[i - 1] + waves_list[i + 1]) / 2
+            else:
+                item = sum(waves_list) / len(waves_list)
             waves_list[i] = item
 
 
@@ -164,8 +175,8 @@ class MainWin(tk.Tk):
         self.scrollbar.config(command=self.listbox.yview)
         self.listbox.pack()
         self.content_frame.grid()
-        tk.Button(self, text="OK", command=lambda: self.do_work()).grid()
-        self.protocol("WM_DELETE_WINDOW", self.exit_fct)
+        tk.Button(self, text="OK", command=self.do_work).grid()
+        self.protocol("WM_DELETE_WINDOW", self.quit)
 
     def do_work(self):
         """ in case user picked some states from the list then will call other
@@ -176,10 +187,19 @@ class MainWin(tk.Tk):
             dict_vaccinated = {}  # amount of vaccinated people by state
             dict_waves = {}  # list of acceptance rate through waves for every state
             start = time.time()
-            """for state in self.picked_states:
-                self.fetch_statedata(state, error_states, dict_vaccinated, dict_waves)
-            # 1.94s for the simple loop"""
 
+            pool = mp.Pool(processes=len(picked_states))
+            results = pool.map(fetch_statedata, picked_states)
+
+            for state_tuple in results:
+                if state_tuple[1]:  # in case its an error state
+                    error_states.append(state_tuple[0])
+                else:
+                    dict_vaccinated[state_tuple[0]] = state_tuple[2]
+                    dict_waves[state_tuple[0]] = state_tuple[3]
+
+            '''
+            #using Queue
             Q = mp.Queue()
             procs = []  # create a list of processes, each will run function fetch_statedata
             for state in picked_states:
@@ -196,14 +216,11 @@ class MainWin(tk.Tk):
                         dict_vaccinated[mytuple[0]] = mytuple[2]
                         dict_waves[mytuple[0]] = mytuple[3]
             for p in procs:
-                p.join()
+                p.join()'''
             print("~*~*~*~*~*~*~*~ Total elapsed time: {:.2f}s ~*~*~*~*~*~*~*~".format(time.time() - start))
-            # Total elapsed time: 0.60s for threads
-            # Total elapsed time: 2.45ss for procs
 
             if error_states:
-                mystr = "No data for " + ', '.join(error_states)
-                tkmb.showerror("Error", mystr, parent=self)
+                tkmb.showerror("Error", f"No data for:\n{', '.join(error_states)}", parent=self)
 
             # wait for the second window to be closed
             PlotWin(self, dict_waves, 'trend')
@@ -212,21 +229,18 @@ class MainWin(tk.Tk):
             self.save_file(dict_waves, dict_vaccinated)
             self.listbox.selection_clear(0, tk.END)
 
-    def exit_fct(self):
-        """ closes the window, exits the program"""
-        self.destroy()
-        self.quit()
-
     def save_file(self, dict_waves, dict_vaccinated):
         """saves data on chosen states to a file in a certain directory"""
         if tkmb.askokcancel("Save", "Save result to file?", parent=self):
-            directory = tk.filedialog.askdirectory(initialdir=os.getcwd())
-            path = os.path.join(directory, DIR_NAME)
+            directory = tk.filedialog.askdirectory(initialdir='.')
+            os.chdir(directory)  # not sure how this ^^^ works
+            # path = os.path.join(directory, DIR_NAME)
             if DIR_NAME not in os.listdir():
-                os.mkdir(path)
+                os.mkdir(DIR_NAME)
             # os.chdir(path)  # either change dir, or append the path to the filename
-            filename_address = os.path.join(path, FILE_NAME)
-            with open(filename_address, "w") as file:
+            # filename_address = os.path.join(path, FILE_NAME)
+            os.chdir(DIR_NAME)
+            with open(FILE_NAME, "w") as file:
                 for state in dict_waves:
                     file.write(state + '\n')
                     liststr = ', '.join(map(str, dict_waves[state]))
@@ -238,20 +252,18 @@ class PlotWin(tk.Toplevel):
     def __init__(self, master, data, option):
         super().__init__(master)
         fig = plt.figure(figsize=(5, 5))
-        fig.add_subplot(111)
         if option == 'trend':
             self.title("Vaccine positive trends for states")
-            plt.ylabel("acceptance rate")
+            plt.ylabel("acceptance rate(%)")
             plt.xlabel("waves")
-            plt.xticks(range(1, NUM_WAVES + 1), rotation=45)
+            plt.xticks(range(1, NUM_WAVES + 1))
             for state in data:
-                plt.plot(range(1, NUM_WAVES + 1), data[state], label=state)
-                plt.legend(loc="best")
+                plt.plot(range(1, NUM_WAVES + 1), [x * 100 for x in data[state]], label=state)
+                plt.legend(loc='best', fontsize='small')
         elif option == 'vaccinated':
             self.title("Rate of vaccinated people")
-            vaccinated = [x for x in data.values()]
-            plt.bar(data.keys(), vaccinated, edgecolor='black')
-            plt.ylabel("rate of vaccinated people")
+            plt.bar(data.keys(), [x * 100 for x in data.values()], edgecolor='black')
+            plt.ylabel("rate of vaccinated people(%)")
             plt.xlabel("states")
             plt.xticks(rotation=45)
         plt.tight_layout()
@@ -263,33 +275,28 @@ class PlotWin(tk.Toplevel):
 if __name__ == '__main__':
     MainWin().mainloop()
 
-
 '''
 ANALYSIS
 For the experience I picked first 10 states for all of the tests.
-
-This is the time results that ive got:
+This is the time results that i've got:
 
 for loop
 ~*~*~*~*~*~*~*~ Total elapsed time: 6.50s ~*~*~*~*~*~*~*~
 Explanation: 
-this way is the sowest because it calls the api one time at a time,
+this way is the slowest because it calls the api one time at a time,
 so it is a sum of time of every request.
 
 threads:
 ~*~*~*~*~*~*~*~ Total elapsed time: 0.67s ~*~*~*~*~*~*~*~
 Explanation: 
-this way is the fastest because it starts threads and they all request for info.
-The memory is shared and they populate what i need 'simultaneously'
+this way is the fastest because it starts threads for each state and they all request state info.
+The memory is shared and they populate the variables that i need 'simultaneously'
 
 processes:
 ~*~*~*~*~*~*~*~ Total elapsed time: 2.21s ~*~*~*~*~*~*~*~
 Explanation: 
-this way is slightly slower than the threads and fatser than loop.
-each process requests the data from the api,the memory is not shared for them.
-In order to keep all retireved data for each state I had to use queue.
-The need to exchange data through different processes slows down the elapsed time 
-
+this way is slightly slower than the threads and faster than the loop.
+Each process requests the data from the api, the memory is not shared for them.
+In order to keep all the retrieved data for each state I had to use queue.
+The need to exchange data through different processes slows down the overall elapsed time.
 '''
-
-

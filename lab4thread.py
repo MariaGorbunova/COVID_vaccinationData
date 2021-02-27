@@ -1,6 +1,7 @@
 # Maria Gorbunova
 # LAB 4
 # Data used: Global survey on coronavirus beliefs, behaviors, and norms: Technical Report
+""" The program calls API using threads and fetches the data on COVID"""
 import os
 import re
 import time
@@ -21,7 +22,7 @@ matplotlib.use('TkAgg')  # tell matplotlib to work with Tkinter
 NUM_WAVES = 15
 DIR_NAME = "lab4dir"
 FILE_NAME = "lab4out.txt"
-statesDict = {
+STATESDICT = {
     'Alabama': 'AL',
     'Alaska': 'AK',
     'Arizona': 'AZ',
@@ -97,14 +98,13 @@ class MainWin(tk.Tk):
         self.scrollbar = tk.Scrollbar(self.content_frame)
         self.scrollbar.pack(side='right', fill='y')
         self.listbox = tk.Listbox(self.content_frame, height=10, width=30, selectmode="multiple")
-        self.listbox.insert(tk.END, *statesDict.keys())
+        self.listbox.insert(tk.END, *STATESDICT.keys())
         self.listbox.config(yscrollcommand=self.scrollbar.set)
         self.scrollbar.config(command=self.listbox.yview)
         self.listbox.pack()
         self.content_frame.grid()
-        tk.Button(self, text="OK", command=lambda: self.do_work()).grid()
-
-        self.protocol("WM_DELETE_WINDOW", self.exit_fct)
+        tk.Button(self, text="OK", command=self.do_work).grid()
+        self.protocol("WM_DELETE_WINDOW", self.quit)
 
     def do_work(self):
         """ in case user picked some states from the list then will call other
@@ -120,7 +120,7 @@ class MainWin(tk.Tk):
             print("~*~*~*~*~*~*~*~ Total elapsed time: {:.2f}s ~*~*~*~*~*~*~*~".format(time.time() - start))
             #~*~*~*~*~*~*~*~ Total elapsed time: 6.50s ~*~*~*~*~*~*~*~"""
 
-
+            # TODO: queue?
             threads = []  # create a list of threads, each thread will run function fetch_statedata
             for state in picked_states:
                 t = threading.Thread(target=self.fetch_statedata,
@@ -132,8 +132,7 @@ class MainWin(tk.Tk):
             print("~*~*~*~*~*~*~*~ Total elapsed time: {:.2f}s ~*~*~*~*~*~*~*~".format(time.time() - start))
             # Total elapsed time: 0.60s for threads
             if error_states:
-                mystr = "No data for " + ', '.join(error_states)
-                tkmb.showerror("Error", mystr, parent=self)
+                tkmb.showerror("Error", f"No data for:\n{', '.join(error_states)}", parent=self)
 
             # wait for the second window to be closed
             PlotWin(self, dict_waves, 'trend')
@@ -142,20 +141,17 @@ class MainWin(tk.Tk):
             self.save_file(dict_waves, dict_vaccinated)
             self.listbox.selection_clear(0, tk.END)
 
-    def exit_fct(self):
-        """ closes the window, exits the program"""
-        self.destroy()
-        self.quit()
-
     def save_file(self, dict_waves, dict_vaccinated):
         if tkmb.askokcancel("Save", "Save result to file?", parent=self):
-            directory = tk.filedialog.askdirectory(initialdir=os.getcwd())
-            path = os.path.join(directory, DIR_NAME)
+            directory = tk.filedialog.askdirectory(initialdir='.')
+            os.chdir(directory)  # not sure how this ^^^ works
+            # path = os.path.join(directory, DIR_NAME)
             if DIR_NAME not in os.listdir():
-                os.mkdir(path)
+                os.mkdir(DIR_NAME)
             # os.chdir(path)  # either change dir, or append the path to the filename
-            filename_address = os.path.join(path, FILE_NAME)
-            with open(filename_address, "w") as file:
+            # filename_address = os.path.join(path, FILE_NAME)
+            os.chdir(DIR_NAME)
+            with open(FILE_NAME, "w") as file:
                 for state in dict_waves:
                     file.write(state + '\n')
                     liststr = ', '.join(map(str, dict_waves[state]))
@@ -164,10 +160,10 @@ class MainWin(tk.Tk):
 
     def fetch_statedata(self, state, error_states, dict_vaccinated, dict_waves):
         """ gets the response from api, calls other methods to populate dictionaries with prepared data"""
-        response = self.get_response(statesDict[state])
+        response = self.get_response(STATESDICT[state])
         jsonData = json.loads(response)
         waves_list, vaccinated = self.for_waves(jsonData)  # getting the list of waves and num of vaccinated ppl
-        if waves_list.count(0.0) >= NUM_WAVES // 2:
+        if waves_list.count(0.0) >= NUM_WAVES // 2: # if more than a half data missing there's no point printing that data
             error_states.append(state)  # getting the list of states with no data to print error message
         else:
             self.cleanup_data(waves_list)  # find average of the neighbors
@@ -190,7 +186,7 @@ class MainWin(tk.Tk):
         for wave in jsonData:
             if 'all' not in wave:  # collect data through all waves
                 waves_sort.append(int(re.findall(r'\d+', wave)[0]))
-                try:
+                try:  # TODO see if its a float automatically
                     yes = float(jsonData[wave]['vaccine_accept']['weighted']['Yes'])
                     if 'I have already been vaccinated' in jsonData[wave]['vaccine_accept']['weighted']:
                         vaccinated = float(
@@ -204,20 +200,16 @@ class MainWin(tk.Tk):
 
     def cleanup_data(self, waves_list):
         """check the neighbors and find avg"""
-        # TODO: not happy with this
         for i, item in enumerate(waves_list):
             if item == 0.0:
-                if i == 0 or waves_list[i - 1] == 0.0:
-                    try:
-                        item = waves_list[i + 1]
-                    except IndexError:
-                        print(item, i, len(waves_list))
+                if i == 0 and waves_list[i + 1] != 0.0:  # or waves_list[i - 1] == 0.0:
+                    item = waves_list[i + 1]
                 elif i == len(waves_list) - 1 or waves_list[i + 1] == 0.0:
                     item = waves_list[i - 1]
-                #else waves_list[i + 1] == 0.0 and waves_list[i - 1] == 0.0:
-                    #item = sum(waves_list) / len(waves_list)
-                else:
+                elif waves_list[i + 1] != 0.0 and waves_list[i - 1] != 0.0:
                     item = (waves_list[i - 1] + waves_list[i + 1]) / 2
+                else:
+                    item = sum(waves_list) / len(waves_list)
                 waves_list[i] = item
 
 
@@ -225,20 +217,18 @@ class PlotWin(tk.Toplevel):
     def __init__(self, master, data, option):
         super().__init__(master)
         fig = plt.figure(figsize=(5, 5))
-        fig.add_subplot(111)
         if option == 'trend':
             self.title("Vaccine positive trends for states")
-            plt.ylabel("acceptance rate")
+            plt.ylabel("acceptance rate(%)")
             plt.xlabel("waves")
-            plt.xticks(range(1, NUM_WAVES + 1), rotation=45)
+            plt.xticks(range(1, NUM_WAVES + 1))
             for state in data:
-                plt.plot(range(1, NUM_WAVES + 1), data[state], label=state)
-                plt.legend(loc="best")
+                plt.plot(range(1, NUM_WAVES + 1), [x * 100 for x in data[state]], label=state)
+                plt.legend(loc='best', fontsize='small')
         elif option == 'vaccinated':
             self.title("Rate of vaccinated people")
-            vaccinated = [x for x in data.values()]
-            plt.bar(data.keys(), vaccinated, edgecolor='black')
-            plt.ylabel("rate of vaccinated people")
+            plt.bar(data.keys(), [x * 100 for x in data.values()], edgecolor='black')
+            plt.ylabel("rate of vaccinated people(%)")
             plt.xlabel("states")
             plt.xticks(rotation=45)
         plt.tight_layout()
