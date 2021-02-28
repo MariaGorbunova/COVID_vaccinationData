@@ -2,6 +2,8 @@
 # LAB 4
 # Data used: Global survey on coronavirus beliefs, behaviors, and norms: Technical Report
 """ The program calls API using threads and fetches the data on COVID"""
+# Revised my code with Ben Lublin: our code is not identical!
+
 import os
 import re
 import time
@@ -120,8 +122,9 @@ class MainWin(tk.Tk):
             print("~*~*~*~*~*~*~*~ Total elapsed time: {:.2f}s ~*~*~*~*~*~*~*~".format(time.time() - start))
             #~*~*~*~*~*~*~*~ Total elapsed time: 6.50s ~*~*~*~*~*~*~*~"""
             # Did not use queue because there is no race condition.
-            # I use list and dictionaries, and they are thread safe containers -> I only do one time operation on them
-            # and I dont really care about the order the containers get populated
+            # I use list and dictionaries, and they are thread safe containers
+            # I only do one time operation on them
+            # and I don't really care about the order the containers get populated
             threads = []  # create a list of threads, each thread will run function fetch_statedata
             for state in picked_states:
                 t = threading.Thread(target=self.fetch_statedata,
@@ -175,24 +178,22 @@ class MainWin(tk.Tk):
     @set_timer
     def get_response(self, val):
         """calling the api and getting the response"""
-        return requests.get(
-            f"http://covidsurvey.mit.edu:5000/query?&country=US&us_state={val}&timeseries=true"
-            f"&signal=vaccine_accept").text
+        return requests.get(f"http://covidsurvey.mit.edu:5000/query?country=US&us_state={val}&signal=vaccine_accept&timeseries=true").text
+            #f"http://covidsurvey.mit.edu:5000/query?&country=US&us_state={val}&timeseries=true&signal=vaccine_accept").text
 
     def for_waves(self, jsonData):
         """Accepts jsonData - a dictionary of data for state, collects the data
         for each wave for a certain state and returns sorted list of waves """
         waves_list, waves_sort = [], []
-        vaccinated = None
+        vaccinated = 0
         # result of this for loop is unsorted waves_list for one state
         for wave in jsonData:
             if 'all' not in wave:  # collect data through all waves
                 waves_sort.append(int(re.findall(r'\d+', wave)[0]))
-                try:  # TODO see if its a float automatically
-                    yes = float(jsonData[wave]['vaccine_accept']['weighted']['Yes'])
+                try:
+                    yes = jsonData[wave]['vaccine_accept']['weighted']['Yes']
                     if 'I have already been vaccinated' in jsonData[wave]['vaccine_accept']['weighted']:
-                        vaccinated = float(
-                            jsonData[wave]['vaccine_accept']['weighted']['I have already been vaccinated'])
+                        vaccinated = jsonData[wave]['vaccine_accept']['weighted']['I have already been vaccinated']
                         yes += vaccinated
                 except KeyError:
                     yes = 0.0

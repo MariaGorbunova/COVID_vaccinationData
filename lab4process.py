@@ -2,6 +2,9 @@
 # LAB 4
 # Data used: Global survey on coronavirus beliefs, behaviors, and norms: Technical Report
 """ The program calls API using processes and fetches the data on COVID"""
+
+# Revised my code with Ben Lublin: the code is not identical!
+
 import os
 import re
 import time
@@ -101,10 +104,9 @@ def fetch_statedata(state):  # (state, Q):
         if 'all' not in wave:  # collect data through all waves
             waves_sort.append(int(re.findall(r'\d+', wave)[0]))
             try:
-                yes = float(jsonData[wave]['vaccine_accept']['weighted']['Yes'])
+                yes = jsonData[wave]['vaccine_accept']['weighted']['Yes']
                 if 'I have already been vaccinated' in jsonData[wave]['vaccine_accept']['weighted']:
-                    vaccinated = float(
-                        jsonData[wave]['vaccine_accept']['weighted']['I have already been vaccinated'])
+                    vaccinated = jsonData[wave]['vaccine_accept']['weighted']['I have already been vaccinated']
                     yes += vaccinated
             except KeyError:
                 yes = 0.0
@@ -124,8 +126,9 @@ def fetch_statedata(state):  # (state, Q):
 def get_response(val):
     """calling the api and getting the response"""
     return requests.get(
-        f"http://covidsurvey.mit.edu:5000/query?&country=US&us_state={val}&timeseries=true"
-        f"&signal=vaccine_accept").text
+        f"http://covidsurvey.mit.edu:5000/query?country=US&us_state={val}&signal=vaccine_accept&timeseries=true").text
+    # f"http://covidsurvey.mit.edu:5000/query?&country=US&us_state={val}&timeseries=true&signal=vaccine_accept").text
+    # f"http://covidsurvey.mit.edu:5000/query?country=US&signal=vaccine_accept&timeseries=true&us_state={val}").text
 
 
 def cleanup_data(waves_list):
